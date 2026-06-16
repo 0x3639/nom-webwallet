@@ -18,7 +18,10 @@ function copyPowFiles(): Plugin {
       server.middlewares.use((req, res, next) => {
         const name = req.url?.slice(1)
         if (name && (POW_FILES as readonly string[]).includes(name)) {
-          res.setHeader('Content-Type', name.endsWith('.wasm') ? 'application/wasm' : 'application/javascript')
+          res.setHeader(
+            'Content-Type',
+            name.endsWith('.wasm') ? 'application/wasm' : 'application/javascript'
+          )
           createReadStream(resolve(powSrcDir, name)).pipe(res)
           return
         }
@@ -51,7 +54,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
-      '@nom/ui': resolve(__dirname, './packages/ui/src'),
     },
   },
   optimizeDeps: {
@@ -60,7 +62,7 @@ export default defineConfig({
         global: 'globalThis',
       },
     },
-    exclude: ['znn-typescript-sdk'],
+    exclude: ['znn-typescript-sdk', 'nom-ui'],
   },
   worker: {
     format: 'es',
