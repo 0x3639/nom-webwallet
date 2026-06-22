@@ -1,3 +1,14 @@
 @import "tailwindcss";
 @import "nom-ui/style.css";
 @source "../node_modules/nom-ui/src";
+
+/* Browser-extension popup: give the document a fixed width (and a sensible
+   min-height) so Chrome doesn't size the popup to content — which otherwise
+   collapses narrow pages like /setup into a tall, clipped sliver. Scoped to the
+   extension build via the `is-extension` class set in main.ts; the web app is
+   unaffected. */
+html.is-extension,
+html.is-extension body {
+  width: 420px;
+  min-height: 600px;
+}

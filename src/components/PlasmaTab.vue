@@ -43,7 +43,14 @@ const qsrBalance = computed(() => {
 
 const minFuseAmount = MIN_FUSE_AMOUNT_QSR
 
-const showBotPrompt = computed(() => parseFloat(qsrBalance.value) < minFuseAmount)
+// Show the plazma.bot prompt only when the account can neither transact nor
+// self-fuse: it has no plasma (so it can't send a transaction — e.g. a fresh
+// account that hasn't been fused by the bot yet) AND it lacks the minimum QSR
+// to fuse its own plasma. Once the account has plasma (e.g. from a prior bot
+// fusion) or enough QSR to self-fuse, the prompt is hidden.
+const showBotPrompt = computed(
+  () => account.currentPlasma.value <= 0 && parseFloat(qsrBalance.value) < minFuseAmount
+)
 
 // Load on mount if active and account exists
 onMounted(async () => {

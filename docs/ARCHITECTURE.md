@@ -26,7 +26,7 @@ Both configs define a single `@` alias mapping to `src/` (`resolve.alias`). `nom
 
 ### Proof-of-work assets
 
-`znn-typescript-sdk` loads `pow.js` and `pow.wasm` from the web root at runtime. Vite doesn't know about these files, so `vite.config.web.ts` defines a `copyPowFiles` plugin that serves them from the SDK's `dist/browser` directory during dev and copies them into the build output during production. The SDK itself is excluded from dependency pre-bundling (`optimizeDeps.exclude`).
+`znn-typescript-sdk` loads `pow.js` and `pow.wasm` from the app root at runtime. Vite doesn't know about these files, so `vite.shared.ts` defines a `copyPowFiles` plugin — shared by both the web and extension builds — that serves them from the SDK's `dist/browser` directory during dev and copies them into the build output during production. The SDK itself is excluded from dependency pre-bundling (`optimizeDeps.exclude`).
 
 ## Layered structure
 
@@ -76,11 +76,11 @@ Plain value transfers go through `TransactionService.sendTransaction`, and recei
 Zenon requires Proof-of-Work to produce a block's nonce when the sending account lacks the plasma to cover it. The SDK computes this in the browser via a WebAssembly module; the asset-serving side (`pow.js` / `pow.wasm`, `setPowBasePath('/')`, the `copyPowFiles` plugin) is covered under [Build targets](#proof-of-work-assets) above. How the work is _scheduled_ is decided in `ZenonService` (`src/core/zenon-service.ts`):
 
 - **Configuration is one-time and idempotent.** Static flags (`powConfigured`, `powWorkerEnabled`) guard setup so it runs once across the singleton's lifetime.
-- **Web app → off-thread worker.** When _not_ in an extension context and `isPowWorkerSupported()` is true, the service calls `Zenon.usePowWorker()` and registers it via `Zenon.setPowProvider(...)`. Running PoW off the main thread keeps the UI responsive and stops the long computation from starving the node WebSocket heartbeat (which previously dropped the connection mid-send).
-- **Extension → main-thread fallback.** `isExtensionContext()` (detected via `chrome.runtime?.id`) returns true inside the MV3 popup/worker, where the CSP `script-src 'self'` forbids the SDK's `blob:`-based worker. The service skips worker setup and lets the SDK use its synchronous main-thread WASM generator.
-- **Defensive fallback.** Worker creation is wrapped in try/catch; if it throws (e.g. a strict CSP elsewhere), the failure is logged and the SDK transparently falls back to main-thread PoW rather than breaking the send.
+- **Web app → off-thread worker.** When *not* in an extension context and `isPowWorkerSupported()` is true, the service calls `Zenon.usePowWorker()` and registers it via `Zenon.setPowProvider(...)`. Running PoW off the main thread keeps the UI responsive and stops the long computation from starving the node WebSocket heartbeat (which previously dropped the connection mid-send).
+- **Extension → sandbox provider.** `isExtensionContext()` (detected via `chrome.runtime?.id`) returns true inside the MV3 popup/full page, where the CSP forbids both the SDK's `blob:`-based worker *and* the PoW module's `new Function` init. In a document context the service registers `sandboxPowProvider` (`src/core/extension-pow-provider.ts`) via `Zenon.setPowProvider(...)`; it runs the PoW module in a manifest sandbox page (`pow-sandbox.html`, whose CSP permits `'unsafe-eval'`) and proxies `(hashHex, difficulty) => Promise<nonce>` over `postMessage`. See `docs/EXTENSION_RELEASE.md` for the CSP details.
+- **Defensive fallback (web).** Worker creation is wrapped in try/catch; if it throws (e.g. a strict CSP elsewhere), the failure is logged and the SDK transparently falls back to main-thread PoW rather than breaking the send.
 
-`src/core/pow-status.ts` exposes a reactive `isGeneratingPow` flag for the UI. It is driven by `trackPow`, a wrapper conforming to the SDK's `PowProvider` signature that increments/decrements an in-flight counter around each generation. Because only the off-thread worker path is wrapped with `trackPow`, this reactive flag reflects PoW activity in the **web app**; in the extension (main-thread generator, no pluggable provider) operation-level toasts cover the feedback instead.
+`src/core/pow-status.ts` exposes a reactive `isGeneratingPow` flag for the UI. It is driven by `trackPow`, a wrapper conforming to the SDK's `PowProvider` signature that increments/decrements an in-flight counter around each generation. Both providers are wrapped with `trackPow` — the off-thread worker (web app) and the sandbox provider (extension) — so this reactive flag reflects PoW activity in both runtime modes.
 
 ## Composables
 
